@@ -18,6 +18,11 @@ impl Task {
             None
         }
     }
+
+    pub fn run(&mut self) {
+        (self.f)();
+        self.last_run = SystemTime::now();
+    }
 }
 
 pub struct Scheduler<const N: usize> {
@@ -29,23 +34,31 @@ impl<const N: usize> Scheduler<N> {
         Self { tasks }
     }
 
-    pub fn next_task(&mut self) -> Option<(&Task, u32)> {
+    pub fn next_task(&mut self) -> Option<&mut Task> {
         let now = SystemTime::now();
-        let mut next: Option<(&Task, u32)> = None;
+        let mut next: Option<(&mut Task, u32)> = None;
 
-        for task in &self.tasks {
-            if let Some(duration) = task.ready(now) {
-                if let Some((next_task, next_duration)) = next {
-                    if task.priority > next_task.priority || duration > next_duration {
-                        next = Some((task, duration));
+        for task in &mut self.tasks {
+            if let Some(missed_cycles) = task.ready(now) {
+                if let Some((next_task, next_missed_cycles)) = &mut next {
+                    if task.priority > next_task.priority || missed_cycles > *next_missed_cycles {
+                        next = Some((task, missed_cycles));
                     }
                 } else {
-                    next = Some((task, duration));
+                    next = Some((task, missed_cycles));
                 }
             }
         }
 
-        next
+        next.map(|(task, _missed_cycles)| task)
+    }
+
+    pub fn run(&mut self) {
+        loop {
+            if let Some(task) = self.next_task() {
+                task.run();
+            }
+        }
     }
 }
 
