@@ -8,14 +8,17 @@ pub struct Task {
 }
 
 impl Task {
-    pub fn is_ready(&self, now: SystemTime) -> bool {
+    pub fn ready(&self, now: SystemTime) -> Option<u32> {
         let elapsed = now.duration_since(self.last_run).unwrap();
         let freq_duration = Duration::from_secs_f32(1.0 / self.freq as f32);
 
-        elapsed >= freq_duration
+        if elapsed >= freq_duration {
+            Some((elapsed.as_secs() / freq_duration.as_secs()) as u32)
+        } else {
+            None
+        }
     }
 }
-
 
 pub struct Scheduler<const N: usize> {
     tasks: [Task; N],
@@ -26,18 +29,18 @@ impl<const N: usize> Scheduler<N> {
         Self { tasks }
     }
 
-    pub fn next_task(&mut self) ->  Option<&Task> {
+    pub fn next_task(&mut self) -> Option<(&Task, u32)> {
         let now = SystemTime::now();
-        let mut next: Option<&Task> = None;
+        let mut next: Option<(&Task, u32)> = None;
 
         for task in &self.tasks {
-            if task.is_ready(now) {
-                if let Some(next_task) = next {
-                    if task.priority > next_task.priority {
-                        next = Some(next_task)
+            if let Some(duration) = task.ready(now) {
+                if let Some((next_task, next_duration)) = next {
+                    if task.priority > next_task.priority || duration > next_duration {
+                        next = Some((task, duration));
                     }
                 } else {
-                    next = Some(task);
+                    next = Some((task, duration));
                 }
             }
         }
