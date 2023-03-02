@@ -1,42 +1,51 @@
-use std::time::{Duration, SystemTime};
+use embedded_time::{
+    duration::{Duration, Microseconds, Milliseconds},
+    fixed_point::FixedPoint,
+    rate::{Hertz, Rate},
+    Clock, Instant,
+};
 
-pub struct Task {
+pub struct Task<C: Clock> {
     f: fn(),
     priority: u8,
-    freq: u32,
-    last_run: SystemTime,
+    period: Milliseconds<C::T>,
+    last_run: Instant<C>,
 }
 
-impl Task {
-    pub fn ready(&self, now: SystemTime) -> Option<u32> {
-        let elapsed = now.duration_since(self.last_run).unwrap();
-        let freq_duration = Duration::from_secs_f32(1.0 / self.freq as f32);
+impl<C: Clock> Task<C> {
+    pub fn ready(&self, now: Instant<C>) -> Option<C::T> {
+        let elapsed: Milliseconds<C::T> = now
+            .checked_duration_since(&self.last_run)
+            .unwrap()
+            .try_into()
+            .unwrap();
 
-        if elapsed >= freq_duration {
-            Some((elapsed.as_secs() / freq_duration.as_secs()) as u32)
+        if elapsed >= self.period {
+            let ms = (elapsed - self.period) / self.period.integer();
+            Some(ms.integer())
         } else {
             None
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, now: Instant<C>) {
         (self.f)();
-        self.last_run = SystemTime::now();
+        self.last_run = now;
     }
 }
 
-pub struct Scheduler<const N: usize> {
-    tasks: [Task; N],
+pub struct Scheduler<const N: usize, C: Clock> {
+    tasks: [Task<C>; N],
+    clock: C,
 }
 
-impl<const N: usize> Scheduler<N> {
-    pub fn new(tasks: [Task; N]) -> Self {
-        Self { tasks }
+impl<const N: usize, C: Clock> Scheduler<N, C> {
+    pub fn new(tasks: [Task<C>; N], clock: C) -> Self {
+        Self { tasks, clock }
     }
 
-    pub fn next_task(&mut self) -> Option<&mut Task> {
-        let now = SystemTime::now();
-        let mut next: Option<(&mut Task, u32)> = None;
+    pub fn next_task(&mut self, now: Instant<C>) -> Option<&mut Task<C>> {
+        let mut next: Option<(&mut Task<C>, C::T)> = None;
 
         for task in &mut self.tasks {
             if let Some(missed_cycles) = task.ready(now) {
@@ -55,8 +64,10 @@ impl<const N: usize> Scheduler<N> {
 
     pub fn run(&mut self) {
         loop {
-            if let Some(task) = self.next_task() {
-                task.run();
+            let now = self.clock.try_now().unwrap();
+
+            if let Some(task) = self.next_task(now) {
+                task.run(now);
             }
         }
     }
