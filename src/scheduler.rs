@@ -1,18 +1,18 @@
 use crate::Task;
 use embedded_time::{Clock, Instant};
 
-pub struct Scheduler<const N: usize, C: Clock> {
-    tasks: [Task<C>; N],
+pub struct Scheduler<const N: usize, T, E, C: Clock> {
+    tasks: [Task<T, E, C>; N],
     clock: C,
 }
 
-impl<const N: usize, C: Clock> Scheduler<N, C> {
-    pub fn new(tasks: [Task<C>; N], clock: C) -> Self {
+impl<const N: usize, T, E, C: Clock> Scheduler<N, T, E, C> {
+    pub fn new(tasks: [Task<T, E, C>; N], clock: C) -> Self {
         Self { tasks, clock }
     }
 
-    pub fn next_task(&mut self, now: Instant<C>) -> Option<&mut Task<C>> {
-        let mut next: Option<(&mut Task<C>, C::T)> = None;
+    pub fn next_task(&mut self, now: Instant<C>) -> Option<&mut Task<T, E, C>> {
+        let mut next: Option<(&mut Task<T, E, C>, C::T)> = None;
 
         for task in &mut self.tasks {
             if let Some(missed_cycles) = task.ready(now) {
@@ -29,12 +29,14 @@ impl<const N: usize, C: Clock> Scheduler<N, C> {
         next.map(|(task, _missed_cycles)| task)
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, state: &T) -> E {
         loop {
             let now = self.clock.try_now().unwrap();
 
             if let Some(task) = self.next_task(now) {
-                task.run(now);
+                if let Err(error) = task.run(now, state) {
+                    break error;
+                }
             }
         }
     }

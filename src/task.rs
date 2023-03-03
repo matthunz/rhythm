@@ -1,14 +1,14 @@
-use embedded_time::{duration::Milliseconds, fixed_point::FixedPoint, Clock, Instant, rate::Hertz};
+use embedded_time::{duration::Milliseconds, fixed_point::FixedPoint, rate::Rate, Clock, Instant};
 
-pub struct Task<C: Clock> {
-    f: fn(),
+pub struct Task<T, E, C: Clock> {
+    f: fn(&T) -> Result<(), E>,
     pub priority: u8,
     pub period: Milliseconds<C::T>,
     pub last_run: Option<Instant<C>>,
 }
 
-impl<C: Clock> Task<C> {
-    pub fn new(period: Milliseconds<C::T>, f: fn()) -> Self {
+impl<T, E, C: Clock> Task<T, E, C> {
+    pub fn new(period: Milliseconds<C::T>, f: fn(&T) -> Result<(), E>) -> Self {
         Self {
             f,
             priority: 0,
@@ -17,6 +17,12 @@ impl<C: Clock> Task<C> {
         }
     }
 
+    pub fn from_frequency(
+        frequency: impl Rate + FixedPoint<T = C::T>,
+        f: fn(&T) -> Result<(), E>,
+    ) -> Self {
+        Self::new(frequency.to_duration().unwrap(), f)
+    }
     pub fn with_priority(mut self, priority: u8) -> Self {
         self.priority = priority;
         self
@@ -32,19 +38,21 @@ impl<C: Clock> Task<C> {
 
             if elapsed >= self.period {
                 let ms = (elapsed - self.period) / self.period.integer();
-                return Some(ms.integer());
+                Some(ms.integer())
+            } else {
+                None
             }
+        } else {
+            Some(now.duration_since_epoch().integer())
         }
-
-        None
     }
 
     pub fn reset(&mut self) {
         self.last_run = None;
     }
 
-    pub fn run(&mut self, now: Instant<C>) {
-        (self.f)();
+    pub fn run(&mut self, now: Instant<C>, state: &T) -> Result<(), E> {
         self.last_run = Some(now);
+        (self.f)(state)
     }
 }
