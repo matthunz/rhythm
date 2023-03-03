@@ -1,14 +1,25 @@
 use embedded_time::{duration::Milliseconds, fixed_point::FixedPoint, rate::Rate, Clock, Instant};
 
 pub struct Task<T, E, C: Clock> {
-    f: fn(&T) -> Result<(), E>,
+    f: fn(&mut T) -> Result<(), E>,
     pub priority: u8,
     pub period: Milliseconds<C::T>,
     pub last_run: Option<Instant<C>>,
 }
 
 impl<T, E, C: Clock> Task<T, E, C> {
-    pub fn new(period: Milliseconds<C::T>, f: fn(&T) -> Result<(), E>) -> Self {
+    /// Create a new task from an function `f` to be run at the given period.
+    /// ```
+    /// use embedded_time::duration::Milliseconds;
+    /// use std_embedded_time::StandardClock;
+    /// use rhythm::Task;
+    ///
+    /// let task: Task<(), (), StandardClock> = Task::new(Milliseconds::new(1), |_| {
+    ///     dbg!("Task running!");
+    ///     Ok(())
+    /// });
+    /// ```
+    pub fn new(period: Milliseconds<C::T>, f: fn(&mut T) -> Result<(), E>) -> Self {
         Self {
             f,
             priority: 0,
@@ -17,9 +28,10 @@ impl<T, E, C: Clock> Task<T, E, C> {
         }
     }
 
+    /// Create a new task from an function `f` to be run at the given frequency.
     pub fn from_frequency(
         frequency: impl Rate + FixedPoint<T = C::T>,
-        f: fn(&T) -> Result<(), E>,
+        f: fn(&mut T) -> Result<(), E>,
     ) -> Self {
         Self::new(frequency.to_duration().unwrap(), f)
     }
@@ -28,6 +40,8 @@ impl<T, E, C: Clock> Task<T, E, C> {
         self
     }
 
+    /// Check if the task is ready to be run and return the time elapsed since the last run.
+    /// If this is the first time the task is run, this returns the duration since the clock's epoch.
     pub fn ready(&self, now: Instant<C>) -> Option<C::T> {
         if let Some(last_run) = self.last_run {
             let elapsed: Milliseconds<C::T> = now
@@ -51,7 +65,7 @@ impl<T, E, C: Clock> Task<T, E, C> {
         self.last_run = None;
     }
 
-    pub fn run(&mut self, now: Instant<C>, state: &T) -> Result<(), E> {
+    pub fn run(&mut self, now: Instant<C>, state: &mut T) -> Result<(), E> {
         self.last_run = Some(now);
         (self.f)(state)
     }

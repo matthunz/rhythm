@@ -29,7 +29,7 @@ impl<const N: usize, T, E, C: Clock> Scheduler<N, T, E, C> {
         next.map(|(task, _missed_cycles)| task)
     }
 
-    pub fn run(&mut self, state: &T) -> E {
+    pub fn run(&mut self, state: &mut T) -> E {
         loop {
             let now = self.clock.try_now().unwrap();
 

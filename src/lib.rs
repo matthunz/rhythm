@@ -1,5 +1,5 @@
 mod scheduler;
-pub use scheduler::Scheduler;
+pub use self::scheduler::Scheduler;
 
 mod task;
-pub use task::Task;
+pub use self::task::Task;
